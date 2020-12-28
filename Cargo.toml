@@ -1,16 +1,16 @@
 [package]
-name = "prog"
+name = "weather-bandit"
 version = "0.1.0"
 authors = ["Michael <michaelbrockus@gmail.com>"]
 edition = "2018"
 readme = "readme.md"
 license = "Apache-2.0"
-repository = "https://github.com/michaelbrockus/rust_cargo_program"
+repository = "https://github.com/michaelbrockus/weather-bandit"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [[bin]]
-name = "prog"
+name = "weather-bandit"
 path = "src/main.rs"
 
 [lib]
