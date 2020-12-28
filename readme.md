@@ -1,10 +1,12 @@
-# Rust Program
+# Weather Bandit for the Command-Line. 🦀☀️🌧🌪
 
 ## About
 
 * * *
 
-Please add relevant information about your application.
+`Weather Bandit` is a fancy little program that can tell you the current weather in your current
+location. Gain the ability to ask your local weather bandit about your current weather from within
+the command-line.
 
 ## Tooling information
 
@@ -38,7 +40,7 @@ cargo install
 And finally we run this cool application:
 
 ```console
-prog
+weather-bandit
 ```
 
 ## Contact the developer
