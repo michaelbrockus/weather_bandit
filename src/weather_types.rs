@@ -1,3 +1,10 @@
+//
+// file: weather_types.rs
+// author: Michael Brockus
+// gmail: <michaelbrockus@gmail.com>
+//
+
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Coordinates {
     pub lat: f32,
