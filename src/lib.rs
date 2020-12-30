@@ -3,239 +3,134 @@
 // author: Michael Brockus
 // gmail: <michaelbrockus@gmail.com>
 //
-extern crate serde;
-extern crate serde_json;
+mod uri;
+pub mod data;
+pub mod current;
+
 #[macro_use]
 extern crate serde_derive;
-extern crate reqwest;
-extern crate time;
+extern crate hyper;
+extern crate serde;
+extern crate serde_json as json;
 extern crate url;
 
-mod weather_types;
-
-use weather_types::*;
-use url::Url;
-
-static API_BASE: &str = "https://api.openweathermap.org/data/2.5/";
+use std::io::Read;
+use data::*;
+use current::*;
 
 #[derive(Debug)]
-pub enum LocationSpecifier<'a>{
-    CityAndCountryName {city: &'a str, country: &'a str},
-    CityId(&'a str),
-    Coordinates {lat: f32, lon: f32},
-    ZipCode {zip: &'a str, country: &'a str},
+pub enum Error {
+    /// An error occurred while performing the HTTP request.
+    HttpError(hyper::Error),
 
-    // The following location specifiers are used to specify multiple cities or a region
-    BoundingBox {lon_left: f32, lat_bottom: f32, lon_right: f32, lat_top: f32, zoom: f32},
-    Circle {lat: f32, lon: f32, count: u16},
-    CityIds(Vec<&'a str>),
+    /// The request was not correctly understood by the server. Details included.
+    BadRequest(ErrorResponse),
+
+    /// Invalid JSON received from the server, likely caused by an API change.
+    JsonDecodeError(String, json::Error),
+
+    /// Indicates an HTTP repsonse with a non-success status code.
+    Failure(hyper::client::Response),
 }
 
-impl<'a> LocationSpecifier<'a> {
-    pub fn format(&'a self) -> Vec<(String, String)> {
-        match &self {
-            LocationSpecifier::CityAndCountryName {city, country} => {
-                if *country == "" {
-                    return vec![("q".to_string(), city.to_string())];
-                } else {
-                    return vec![("q".to_string(), format!("{},{}", city, country))];
+/// A universal result type used as return for all calls.
+pub type Result<T> = std::result::Result<T, Error>;
+
+/// Central hub to access all weather-related facilities.
+pub struct WeatherHub {
+    client: hyper::Client,
+    key: String,
+}
+
+impl<'a> WeatherHub {
+    /// Creates a new WeatherHub which will use the provided client to perform
+    /// its requests. It also requires an OWM API key.
+    pub fn new(client: hyper::Client, key: &str) -> WeatherHub {
+        WeatherHub {
+            client: client,
+            key: key.to_string(),
+        }
+    }
+
+    /// Provides access to the current-weather facilities.
+    pub fn current(&'a self) -> CurrentWeatherQuery<'a> {
+        CurrentWeatherQuery::new(&self, {
+            let mut ub = uri::UriBuilder::new();
+            ub.param("appid", self.key.clone());
+            ub
+        })
+    }
+
+    /// Does the actual API call, parses the response and handles any errors.
+    fn run_query<D>(&'a self, query: String) -> Result<(hyper::client::Response, D)>
+        where D: serde::Deserialize
+    {
+        let req_result = self.client.request(hyper::method::Method::Get, &query).send();
+
+        match req_result {
+            Err(err) => return Err(Error::HttpError(err)),
+            Ok(mut res) => {
+                if !res.status.is_success() {
+                    let mut json_err = String::new();
+                    res.read_to_string(&mut json_err).unwrap();
+                    return match json::from_str::<ErrorResponse>(&json_err) {
+                               Ok(serr) => Err(Error::BadRequest(serr)),
+                               Err(_) => Err(Error::Failure(res)),
+                           };
                 }
-            }
-            LocationSpecifier::CityId(id) => {
-                return vec![("id".to_string(), id.to_string())];
-            }
-            LocationSpecifier::Coordinates {lat, lon} => {
-                return vec![("lat".to_string(), format!("{}",lat)), 
-                            ("lon".to_string(), format!("{}",lon))];
-            }
-            LocationSpecifier::ZipCode {zip, country} => {
-                if *country == "" {
-                    return vec![("zip".to_string(), zip.to_string())];
-                } else {
-                    return vec![("zip".to_string(), format!("{},{}", zip, country))];
-                }
-            }
-            LocationSpecifier::BoundingBox {lon_left, lat_bottom, lon_right, lat_top, zoom} => {
-                return vec![("bbox".to_string(), format!("{},{},{},{},{}", lon_left, lat_bottom, lon_right, lat_top, zoom))];
-            }
-            LocationSpecifier::Circle {lat, lon, count} => {
-                return vec![("lat".to_string(), format!("{}", lat)), 
-                            ("lon".to_string(), format!("{}", lon)), 
-                            ("cnt".to_string(), format!("{}", count))];
-            }
-            LocationSpecifier::CityIds(ids) => {
-                let mut locations: String = "".to_string();
-                for loc in ids { locations += loc; }
-                return vec![("id".to_string(), locations.to_string())];
+                let mut json_resp = String::new();
+                res.read_to_string(&mut json_resp).unwrap();
+                return match json::from_str(&json_resp) {
+                           Ok(decoded) => Ok((res, decoded)),
+                           Err(err) => Err(Error::JsonDecodeError(json_resp, err)),
+                       };
             }
         }
     }
 }
 
-fn get<T>(url: &str) -> Result<T, ErrorReport> where T: serde::de::DeserializeOwned {
-    let res = reqwest::get(url).unwrap().text().unwrap();
-    let data: T = match serde_json::from_str(&res) {
-        Ok(val) => {val},
-        Err(_) => {
-            let err_report: ErrorReport = match serde_json::from_str(res.as_str()) {
-                Ok(report) => {report},
-                Err(_) => {
-                    return Err(ErrorReport{cod: 0, message: format!("Got unexpected response: {:?}", res)});
-                }
-            };
-            return Err(err_report);
+/// Rectangle specified by geographic coordinates (latitude and longitude).
+#[derive(Debug)]
+pub struct BoundingBox {
+    pub top: f32,
+    pub bottom: f32,
+    pub left: f32,
+    pub right: f32,
+}
+
+/// Units format for this query.
+#[derive(Debug, Serialize, Deserialize)]
+pub enum Units {
+    Metric,
+    Imperial,
+}
+
+impl ToString for Units {
+    fn to_string(&self) -> String {
+        match self {
+            &Units::Metric => "metric".to_string(),
+            &Units::Imperial => "imperial".to_string(),
         }
-    };
-    Ok(data)
-}
-
-//
-// Should return the current weather forcast
-//
-pub fn get_current_weather(location: LocationSpecifier, key: &str) -> Result<WeatherReportCurrent, ErrorReport> {
-	let mut base = String::from(API_BASE);
-	let mut params = location.format();
-
-	base.push_str("weather");
-	params.push(("APPID".to_string(), key.to_string()));
-
-	let url = Url::parse_with_params(&base, params).unwrap();
-    get(&url.as_str())
-}
-
-//
-// Should return a forcast from one too five days
-//
-pub fn get_5_day_forecast(location: LocationSpecifier, key: &str) -> Result<WeatherReport5Day, ErrorReport> {
-    let mut base = String::from(API_BASE);
-	let mut params = location.format();
-
-	base.push_str("forecast");
-	params.push(("APPID".to_string(), key.to_string()));
-
-	let url = Url::parse_with_params(&base, params).unwrap();
-    get(&url.as_str())
-}
-
-//
-// Should return a forcast from one too sixteen days
-//
-pub fn get_16_day_forecast(location: LocationSpecifier, key: &str, len: u8) -> Result<WeatherReport16Day, ErrorReport> {
-    if len > 16 || len == 0 {
-        return Err(ErrorReport{cod: 0, message: format!("Only support 1 to 16 day forecasts but {:?} requested", len)});
     }
-    let mut base = String::from(API_BASE);
-	let mut params = location.format();
-
-	base.push_str("forecast/daily");
-	params.push(("cnt".to_string(), format!("{}", len)));
-	params.push(("APPID".to_string(), key.to_string()));
-
-	let url = Url::parse_with_params(&base, params).unwrap();
-    get(&url.as_str())
 }
 
-//
-// Should get the historical data
-//
-pub fn get_historical_data(location: LocationSpecifier, key: &str, start: time::Timespec, end: time::Timespec) -> Result<WeatherReportHistorical, ErrorReport> {
-    let mut base = String::from(API_BASE);
-	let mut params = location.format();
-
-	base.push_str("history/city");
-	params.push(("type".to_string(), "hour".to_string()));
-	params.push(("start".to_string(), format!("{}", start.sec)));
-	params.push(("end".to_string(), format!("{}", end.sec)));
-	params.push(("APPID".to_string(), key.to_string()));
-
-	let url = Url::parse_with_params(&base, params).unwrap();
-    get(&url.as_str())
-}
-
-//
-// Should get the accumulated temperature data
-//
-pub fn get_accumulated_temperature_data(location: LocationSpecifier, key: &str, start: time::Timespec, end: time::Timespec, threshold: u32) -> Result<WeatherAccumulatedTemperature, ErrorReport> {
-    let mut base = String::from(API_BASE);
-	let mut params = location.format();
-
-	base.push_str("history/accumulated_temperature");
-	params.push(("type".to_string(), "hour".to_string()));
-	params.push(("start".to_string(), format!("{}", start.sec)));
-	params.push(("end".to_string(), format!("{}", end.sec)));
-	params.push(("threshold".to_string(), format!("{}", threshold)));
-	params.push(("APPID".to_string(), key.to_string()));
-
-	let url = Url::parse_with_params(&base, params).unwrap();
-    get(&url.as_str())
-}
-
-//
-// Should get the accumulated precipitation data
-//
-pub fn get_accumulated_precipitation_data(location: LocationSpecifier, key: &str, start: time::Timespec, end: time::Timespec, threshold: u32) -> Result<WeatherAccumulatedPrecipitation, ErrorReport> {
-    let mut base = String::from(API_BASE);
-	let mut params = location.format();
-
-	base.push_str("history/accumulated_precipitation");
-	params.push(("type".to_string(), "hour".to_string()));
-	params.push(("start".to_string(), format!("{}", start.sec)));
-	params.push(("end".to_string(), format!("{}", end.sec)));
-	params.push(("threshold".to_string(), format!("{}", threshold)));
-	params.push(("APPID".to_string(), key.to_string()));
-
-	let url = Url::parse_with_params(&base, params).unwrap();
-    get(&url.as_str())
-}
-
-//
-// Should return the cuurent UV index
-//
-pub fn get_current_uv_index(location: LocationSpecifier, key: &str) -> Result<UvIndex, ErrorReport> {
-    let mut base = String::from(API_BASE);
-	let mut params = location.format();
-
-	base.push_str("uvi");
-	params.push(("APPID".to_string(), key.to_string()));
-
-	let url = Url::parse_with_params(&base, params).unwrap();
-    get(&url.as_str())
-}
-
-//
-// Should get a forcast foe UV index
-//
-pub fn get_forecast_uv_index(location: LocationSpecifier, key: &str, len: u8) -> Result<ForecastUvIndex, ErrorReport> {
-    if len > 8 || len == 0 {
-        return Err(ErrorReport{cod: 0, message: format!("Only support 1 to 8 day forecasts but {:?} requested", len)});
+pub trait FormatResponse<'a>
+    where Self: std::marker::Sized + uri::HasBuilder<'a>
+{
+    /// Change units format for the query. Default is Standard.
+    fn units(mut self, units: Units) -> Self {
+        self.builder().param("units", units.to_string());
+        self
     }
-    let mut base = String::from(API_BASE);
-	let mut params = location.format();
 
-	base.push_str("uvi/forecast");
-	params.push(("cnt".to_string(), format!("{}", len)));
-	params.push(("APPID".to_string(), key.to_string()));
-
-	let url = Url::parse_with_params(&base, params).unwrap();
-    get(&url.as_str())
+    /// Change language for the query. Note that only the `description` field
+    /// of [Weather](struct.Weather.html) is translated.
+    fn lang(mut self, lang: &str) -> Self {
+        self.builder().param("lang", lang.to_string());
+        self
+    }
 }
-
-//
-// Should get a historical UV index
-//
-pub fn get_historical_uv_index(location: LocationSpecifier, key: &str, start: time::Timespec, end: time::Timespec) -> Result<HistoricalUvIndex, ErrorReport> {
-    let mut base = String::from(API_BASE);
-	let mut params = location.format();
-
-	base.push_str("uvi/history");
-	params.push(("start".to_string(), format!("{}", start.sec)));
-	params.push(("end".to_string(), format!("{}", end.sec)));
-	params.push(("APPID".to_string(), key.to_string()));
-
-	let url = Url::parse_with_params(&base, params).unwrap();
-    get(&url.as_str())
-}
-
+	
 //
 // Greet the user
 //
