@@ -18,8 +18,6 @@ name = "program"
 path = "src/lib.rs"
 
 [dependencies]
-hyper = "^0.10.5"
-url = "^1.4.0"
-serde = "0.9.11"
-serde_json = "0.9.9"
-serde_derive = "0.9.11"
+openweather-async = "0.1.2"
+tokio = { version="0.2.22", features = ["macros", "tcp", "dns", "io-util"]}
+dotenv = "0.15.0"
