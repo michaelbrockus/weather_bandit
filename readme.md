@@ -40,7 +40,7 @@ cargo install
 And finally we run this cool application:
 
 ```console
-weather-bandit
+weather-bandit <command> <switch>
 ```
 
 ## Contact the developer
