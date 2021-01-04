@@ -9,7 +9,6 @@
 // project since its important to test once implementation against a set
 // of common test cases
 //
-extern crate program;
 
 //
 // list of all the test cases for this project
