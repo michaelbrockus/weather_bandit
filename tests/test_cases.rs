@@ -26,5 +26,4 @@ mod tests {
     // fn test_greet() {
     //     assert_eq!("Hello, Rust Developer.", program::greet());
     // } // end of test case
-
 } // end of test fixture
