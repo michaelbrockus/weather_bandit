@@ -1,8 +1,7 @@
-//
 // file: program.rs
 // author: Michael Brockus
 // gmail: <michaelbrockus@gmail.com>
-//
+
 use dotenv::dotenv;
 use openweather_async::{OpenWeather, Units, Weather};
 use std::env;
@@ -19,11 +18,9 @@ pub async fn show_help() {
     println!("help    | Show this help message\n");
 }
 
-//
 // foundation of the program and related
 // application logic must be implemented
 // in the foundation.
-//
 pub async fn foundation() -> Result<(), Box<dyn std::error::Error>> {
     dotenv().expect("No env file found");
     let args: Vec<String> = env::args().collect();
