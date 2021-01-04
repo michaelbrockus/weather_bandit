@@ -10,14 +10,14 @@ jobs:
   macos:
     runs-on: macos-latest
     steps:
-    - uses: actions/checkout@v2.3.2
+    - uses: actions/checkout@v2.3.4
     - run: cargo build
     - run: cargo test
 
   windows:
     runs-on: windows-latest
     steps:
-    - uses: actions/checkout@v1
+    - uses: actions/checkout@v2.3.4
     - run: cargo build
     - run: cargo test
 
@@ -26,7 +26,7 @@ jobs:
     container:
       image: "michaelbrockus/ubuntu-host:latest"
     steps:
-    - uses: actions/checkout@v2.3.2
+    - uses: actions/checkout@v2.3.4
     - run: |
         cargo build &&
         cargo test
@@ -37,7 +37,7 @@ jobs:
     container:
       image: "michaelbrockus/debian-host:latest"
     steps:
-    - uses: actions/checkout@v2.3.2
+    - uses: actions/checkout@v2.3.4
     - run: |
         cargo build &&
         cargo test
@@ -48,7 +48,7 @@ jobs:
     container:
       image: "michaelbrockus/fedora-host:latest"
     steps:
-    - uses: actions/checkout@v2.3.2
+    - uses: actions/checkout@v2.3.4
     - run: |
         cargo build &&
         cargo test
@@ -59,7 +59,7 @@ jobs:
     container:
       image: "michaelbrockus/archlinux-host:latest"
     steps:
-    - uses: actions/checkout@v2.3.2
+    - uses: actions/checkout@v2.3.4
     - run: |
         cargo build &&
         cargo test
@@ -70,7 +70,7 @@ jobs:
     container:
       image: "michaelbrockus/opensuse-host:latest"
     steps:
-    - uses: actions/checkout@v2.3.2
+    - uses: actions/checkout@v2.3.4
     - run: |
         cargo build &&
         cargo test
