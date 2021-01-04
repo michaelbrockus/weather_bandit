@@ -5,7 +5,6 @@
 //
 extern crate program;
 use program::foundation;
-use tokio;
 
 // main is where program execution starts
 #[tokio::main]
