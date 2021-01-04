@@ -7,11 +7,6 @@ use dotenv::dotenv;
 use openweather_async::{OpenWeather, Units, Weather};
 use std::env;
 
-//
-// foundation of the program and related
-// application logic must be implemented
-// in the foundation.
-//
 pub async fn show_report(report: Weather) {
     println!("The weather report at {}", report.name);
     println!("Degrees    | {:?}", report.wind.deg);
