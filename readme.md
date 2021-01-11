@@ -8,6 +8,12 @@
 location. Gain the ability to ask your local weather bandit about your current weather from within
 the command-line.
 
+## Program Preview
+
+* * *
+
+Please add an image for the user to see.
+
 ## Tooling information
 
 * * *
